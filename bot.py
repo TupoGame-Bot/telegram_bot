@@ -2,19 +2,17 @@ import telebot
 from telebot import types
 import os
 
-TOKEN = os.environ.get("TOKEN")  # токен из Render
+TOKEN = os.environ.get("TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
-# Команда /start
+# /start
 @bot.message_handler(commands=['start'])
 def start(message):
-    # Inline-кнопки без Баланса
     keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton("📥 Пополнение", callback_data="deposit"))
+    keyboard.add(types.InlineKeyboardButton("📥 Пополнить", callback_data="deposit"))
     keyboard.add(types.InlineKeyboardButton("📤 Вывод", callback_data="withdraw"))
     keyboard.add(types.InlineKeyboardButton("📞 Помощь", callback_data="help"))
 
-    # Текст приветствия с промокодом и выделением
     welcome_text = """
 Добро пожаловать в PayGo
 
@@ -30,17 +28,19 @@ def start(message):
 """
     bot.send_message(message.chat.id, welcome_text, reply_markup=keyboard, parse_mode='Markdown')
 
-# Обработка нажатий на кнопки
+
+# Обработка нажатий кнопок
 @bot.callback_query_handler(func=lambda call: True)
 def callback_inline(call):
     if call.data == "deposit":
-        bot.answer_callback_query(call.id, "Для пополнения используйте PayGo или свяжитесь с оператором.")
-        bot.send_message(call.message.chat.id, "💳 Выберите способ пополнения: ...")
-    elif call.data == "withdraw":
-        bot.answer_callback_query(call.id, "Для вывода средств свяжитесь с оператором.")
-        bot.send_message(call.message.chat.id, "💸 Введите сумму для вывода: ...")
-    elif call.data == "help":
-        bot.answer_callback_query(call.id, "Оператор: @phelpgo_bot")
-        bot.send_message(call.message.chat.id, "Если возникли вопросы, пишите оператору.")
+        # Создаём меню с сайтами
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(types.InlineKeyboardButton("1xbet", callback_data="site_1xbet"))
+        keyboard.add(types.InlineKeyboardButton("1win", callback_data="site_1win"))
+        keyboard.add(types.InlineKeyboardButton("melbet", callback_data="site_melbet"))
 
-bot.infinity_polling()
+        deposit_text = """
+📥 Пополнить > Выберите сайт для пополнения
+
+⚠️ Проверьте ваш ID еще раз
+❌ Отменить пополнение невозможно
