@@ -1,10 +1,24 @@
 import telebot
+from telebot import types
+import os
 
-TOKEN = "8535847780:AAGPgHzEurss5sI2KjHFB7x9ICcipBpLQtI"
+TOKEN = os.environ.get("TOKEN")  # <- берём токен из Render
+bot = telebot.TeleBot(TOKEN)
 
-bot = telebot.TeleBot(TOKEN, parse_mode=None)
+@bot.message_handler(commands=['start'])
+def start(message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.row("/help", "/info")
+    bot.send_message(message.chat.id, "Привет! Я бот с кнопками 🤖", reply_markup=keyboard)
 
-try:
-    print(bot.get_me())
-except Exception as e:
-    print("Ошибка подключения:", e)
+@bot.message_handler(commands=['help'])
+def help_cmd(message):
+    bot.send_message(message.chat.id, "Вот список команд:\n/start\n/help\n/info")
+
+@bot.message_handler(commands=['info'])
+def info_cmd(message):
+    bot.send_message(message.chat.id, "Я пример бота с кнопками и командами!")
+
+bot.infinity_polling()
+
+
