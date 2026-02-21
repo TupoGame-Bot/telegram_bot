@@ -1,46 +1,118 @@
-import telebot
-from telebot import types
 import os
+import asyncio
+import random
+import datetime
+import aiohttp
+from aiogram import Bot, Dispatcher, executor, types
+from aiohttp import web
 
-TOKEN = os.environ.get("TOKEN")
-bot = telebot.TeleBot(TOKEN)
+from config import BOT_TOKEN
+import storage
 
-# /start
-@bot.message_handler(commands=['start'])
-def start(message):
-    keyboard = types.InlineKeyboardMarkup()
-    keyboard.add(types.InlineKeyboardButton("📥 Пополнить", callback_data="deposit"))
-    keyboard.add(types.InlineKeyboardButton("📤 Вывод", callback_data="withdraw"))
-    keyboard.add(types.InlineKeyboardButton("📞 Помощь", callback_data="help"))
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(bot)
 
-    welcome_text = """
-Добро пожаловать в PayGo
+# ===== START =====
+@dp.message_handler(commands=["start"])
+async def start(msg: types.Message):
+    await msg.answer(
+        "👋 Привет! Я универсальный бот.\n\n"
+        "📌 /add текст — добавить задачу\n"
+        "📋 /list — список задач\n"
+        "✅ /done номер — выполнить задачу\n"
+        "🧹 /clear — очистить список\n\n"
+        "⏰ /time — текущее время\n"
+        "🌦 /weather город — погода\n"
+        "💱 /rates — курсы валют\n"
+        "🎲 /random — случайное число\n"
+        "ℹ️ /help — помощь"
+    )
 
-📥 Пополнение: 0%
-📤 Вывод: 0%
-✅ Работаем: 24/7
+# ===== HELP =====
+@dp.message_handler(commands=["help"])
+async def help_cmd(msg: types.Message):
+    await msg.answer("Просто напиши команду из /start 👌")
 
-🎟 *Промокод при регистрации:* 
-💜 PAYGO
-💜 До 35.000 сом бонуса при депозите
+# ===== TODO =====
+@dp.message_handler(commands=["add"])
+async def add_task(msg: types.Message):
+    text = msg.get_args()
+    if not text:
+        return await msg.answer("❗ Напиши текст задачи")
+    storage.add_task(msg.from_user.id, text)
+    await msg.answer("✅ Задача добавлена")
 
-Оператор: @phelpgo_bot
-"""
-    bot.send_message(message.chat.id, welcome_text, reply_markup=keyboard, parse_mode='Markdown')
+@dp.message_handler(commands=["list"])
+async def list_tasks(msg: types.Message):
+    tasks = storage.get_tasks(msg.from_user.id)
+    if not tasks:
+        return await msg.answer("📭 Список пуст")
+    text = ""
+    for i, t in enumerate(tasks):
+        text += f"{i+1}. {'✅' if t['done'] else '⏳'} {t['text']}\n"
+    await msg.answer(text)
 
+@dp.message_handler(commands=["done"])
+async def done_task(msg: types.Message):
+    try:
+        index = int(msg.get_args()) - 1
+    except:
+        return await msg.answer("❗ Укажи номер")
+    if storage.done_task(msg.from_user.id, index):
+        await msg.answer("🎉 Готово!")
+    else:
+        await msg.answer("❌ Ошибка")
 
-# Обработка нажатий кнопок
-@bot.callback_query_handler(func=lambda call: True)
-def callback_inline(call):
-    if call.data == "deposit":
-        # Создаём меню с сайтами
-        keyboard = types.InlineKeyboardMarkup()
-        keyboard.add(types.InlineKeyboardButton("1xbet", callback_data="site_1xbet"))
-        keyboard.add(types.InlineKeyboardButton("1win", callback_data="site_1win"))
-        keyboard.add(types.InlineKeyboardButton("melbet", callback_data="site_melbet"))
+@dp.message_handler(commands=["clear"])
+async def clear(msg: types.Message):
+    storage.clear_tasks(msg.from_user.id)
+    await msg.answer("🧹 Очищено")
 
-        deposit_text = """
-📥 Пополнить > Выберите сайт для пополнения
+# ===== TIME =====
+@dp.message_handler(commands=["time"])
+async def time_cmd(msg: types.Message):
+    now = datetime.datetime.now().strftime("%H:%M:%S")
+    await msg.answer(f"🕒 Сейчас {now}")
 
-⚠️ Проверьте ваш ID еще раз
-❌ Отменить пополнение невозможно
+# ===== RANDOM =====
+@dp.message_handler(commands=["random"])
+async def random_cmd(msg: types.Message):
+    await msg.answer(f"🎲 {random.randint(1, 100)}")
+
+# ===== WEATHER =====
+@dp.message_handler(commands=["weather"])
+async def weather(msg: types.Message):
+    city = msg.get_args()
+    if not city:
+        return await msg.answer("❗ Напиши город")
+
+    url = f"https://wttr.in/{city}?format=3"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as r:
+            await msg.answer(await r.text())
+
+# ===== RATES =====
+@dp.message_handler(commands=["rates"])
+async def rates(msg: types.Message):
+    async with aiohttp.ClientSession() as s:
+        async with s.get("https://api.exchangerate.host/latest?base=USD") as r:
+            data = await r.json()
+            usd = data["rates"]["RUB"]
+            eur = data["rates"]["EUR"]
+            await msg.answer(f"💱 USD → RUB: {usd:.2f}\n💱 USD → EUR: {eur:.2f}")
+
+# ===== RENDER WEB SERVER =====
+async def web_server():
+    app = web.Application()
+    app.router.add_get("/", lambda r: web.Response(text="Bot is alive"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 10000)))
+    await site.start()
+
+async def main():
+    await web_server()
+    executor.start_polling(dp, skip_updates=True)
+
+if __name__ == "__main__":
+    asyncio.run(main())
